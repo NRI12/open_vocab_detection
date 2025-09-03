@@ -5,7 +5,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from pytorch_lightning.loggers import TensorBoardLogger
-
 from data.datamodule import Flickr30kDataModule
 from training.lightning_module import OpenVocabLightningModule
 
@@ -16,16 +15,16 @@ def main():
             'image_encoder': {
                 'model_name': 'swin_base_patch4_window7_224',
                 'pretrained': True,
-                'out_dim': 768
+                'out_dim': 512
             },
             'text_encoder': {},
             'fusion': {
-                'dim': 768,
+                'dim': 512,
                 'num_layers': 2,
                 'num_heads': 8
             },
             'box_head': {
-                'input_dim': 768,
+                'input_dim': 512,
                 'hidden_dim': 256,
                 'num_queries': 100
             }
@@ -39,7 +38,7 @@ def main():
         data_dir='./data',
         batch_size=8,
         num_workers=4,
-        img_size=(800, 800)
+        img_size=(224, 224)
     )
     
     # Model
