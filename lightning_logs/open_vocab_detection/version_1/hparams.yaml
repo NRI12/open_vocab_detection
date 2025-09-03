@@ -1,0 +1,17 @@
+config:
+  lr: 0.0001
+  model:
+    box_head:
+      hidden_dim: 256
+      input_dim: 768
+      num_queries: 100
+    fusion:
+      dim: 768
+      num_heads: 8
+      num_layers: 2
+    image_encoder:
+      model_name: swin_base_patch4_window7_224
+      out_dim: 768
+      pretrained: true
+    text_encoder: {}
+  weight_decay: 0.0001

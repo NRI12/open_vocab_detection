@@ -1,0 +1,7 @@
+pytorch_lightning
+matplotlib
+torchvision
+transformers
+scipy
+torchmetrics[detection]
+tensorboardX
