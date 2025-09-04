@@ -37,7 +37,7 @@ class OpenVocabDetector(nn.Module):
         img_proj = self.img_proj(region_features)
         text_proj = self.text_proj(text_features.unsqueeze(1))
         
-        # Cosine similarity
+        # Cosine similarity for label not seen
         img_proj = F.normalize(img_proj, dim=-1)
         text_proj = F.normalize(text_proj, dim=-1)
         similarity = torch.matmul(img_proj, text_proj.transpose(-2, -1)).squeeze(-1)

@@ -1,73 +1,168 @@
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.ops import box_iou, generalized_box_iou
+from torchvision.ops import generalized_box_iou
 from scipy.optimize import linear_sum_assignment
 
 
 class HungarianMatcher:
-    def __init__(self, cost_class=1, cost_bbox=5, cost_giou=2):
+    def __init__(self, cost_class=2, cost_bbox=5, cost_giou=2):
         self.cost_class = cost_class
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
     
-    def __call__(self, outputs, targets):
-        B, num_queries = outputs['cls_pred'].shape[:2]
+    def __call__(self, outputs, targets, text_embeddings):
+        B, num_queries = outputs['bbox_pred'].shape[:2]
         
-        out_prob = outputs['cls_pred'].flatten(0, 1).sigmoid()
+        region_embeddings = outputs['region_features'].flatten(0, 1)
+        
+        if text_embeddings.dim() == 3:
+            text_embeddings = text_embeddings.mean(dim=1)
+        
         out_bbox = outputs['bbox_pred'].flatten(0, 1)
         
-        tgt_bbox = torch.cat(targets['boxes'])
+        all_tgt_boxes = []
+        all_tgt_labels = []
         
-        cost_class = -out_prob[:, 0]
+        for b in range(B):
+            if len(targets['boxes'][b]) > 0:
+                all_tgt_boxes.append(targets['boxes'][b])
+                n_targets = len(targets['boxes'][b])
+                all_tgt_labels.append(text_embeddings[b:b+1].expand(n_targets, -1))
+        
+        if len(all_tgt_boxes) == 0:
+            return [(torch.empty(0, dtype=torch.int64), torch.empty(0, dtype=torch.int64)) for _ in range(B)]
+        
+        tgt_bbox = torch.cat(all_tgt_boxes)
+        tgt_text_emb = torch.cat(all_tgt_labels)
+        
+        region_emb_norm = F.normalize(region_embeddings, dim=-1)
+        tgt_text_norm = F.normalize(tgt_text_emb, dim=-1)
+        
+        cost_class = -torch.matmul(region_emb_norm, tgt_text_norm.T)
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
         cost_giou = -generalized_box_iou(out_bbox, tgt_bbox)
         
-        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class[:, None] + self.cost_giou * cost_giou
+        C = (self.cost_class * cost_class + 
+             self.cost_bbox * cost_bbox + 
+             self.cost_giou * cost_giou)
         C = C.view(B, num_queries, -1).cpu()
         
         sizes = [len(v) for v in targets['boxes']]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
         
-        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+        return [(torch.as_tensor(i, dtype=torch.int64), 
+                torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
+
 
 class DetectionLoss(nn.Module):
     def __init__(self, config=None):
         super().__init__()
         self.matcher = HungarianMatcher()
         
-    def forward(self, outputs, targets, texts):
-        indices = self.matcher(outputs, targets)
+        self.lambda_cls = config.get('lambda_cls', 2.0)
+        self.lambda_bbox = config.get('lambda_bbox', 5.0) 
+        self.lambda_giou = config.get('lambda_giou', 2.0)
+        self.lambda_sim = config.get('lambda_sim', 1.0)
+        self.temperature = config.get('temperature', 0.07)
+        
+    def forward(self, outputs, targets, text_embeddings, texts):
+        indices = self.matcher(outputs, targets, text_embeddings)
         
         losses = {}
-        losses['loss_ce'] = self.get_loss_ce(outputs, targets, indices)
-        losses['loss_bbox'] = self.get_loss_bbox(outputs, targets, indices)
-        losses['loss_sim'] = self.get_loss_similarity(outputs, targets, indices)
+        
+        if hasattr(outputs, 'cls_pred') and outputs['cls_pred'] is not None:
+            losses['loss_cls'] = self.lambda_cls * self.get_loss_cls(outputs, targets, indices)
+        
+        bbox_losses = self.get_loss_bbox_giou(outputs, targets, indices)
+        losses['loss_bbox'] = self.lambda_bbox * bbox_losses['l1']
+        losses['loss_giou'] = self.lambda_giou * bbox_losses['giou'] 
+        
+        losses['loss_sim'] = self.lambda_sim * self.get_contrastive_loss(
+            outputs, targets, indices, text_embeddings)
         
         return losses
-    def get_loss_ce(self, outputs, targets, indices):
-            src_logits = outputs['cls_pred']
-            idx = self._get_src_permutation_idx(indices)
-            target_classes = torch.zeros_like(src_logits[:, :, 0])
-            target_classes[idx] = 1.0
-            
-            return F.binary_cross_entropy_with_logits(src_logits[:, :, 0], target_classes)
-        
-    def get_loss_bbox(self, outputs, targets, indices):
+    
+    def get_loss_cls(self, outputs, targets, indices):
+        src_logits = outputs['cls_pred']
         idx = self._get_src_permutation_idx(indices)
+        
+        target_classes = torch.zeros_like(src_logits[:, :, 0])
+        if len(idx[0]) > 0:
+            target_classes[idx] = 1.0
+        
+        return F.binary_cross_entropy_with_logits(src_logits[:, :, 0], target_classes)
+    
+    def get_loss_bbox_giou(self, outputs, targets, indices):
+        idx = self._get_src_permutation_idx(indices)
+        
+        if len(idx[0]) == 0:
+            return {
+                'l1': torch.tensor(0.0, device=outputs['bbox_pred'].device, requires_grad=True),
+                'giou': torch.tensor(0.0, device=outputs['bbox_pred'].device, requires_grad=True)
+            }
+        
         src_boxes = outputs['bbox_pred'][idx]
         target_boxes = torch.cat([t[i] for t, (_, i) in zip(targets['boxes'], indices)])
         
-        return F.smooth_l1_loss(src_boxes, target_boxes)
-    
-    def get_loss_similarity(self, outputs, targets, indices):
-        similarity = outputs['similarity']
-        idx = self._get_src_permutation_idx(indices)
-        target_sim = torch.zeros_like(similarity)
-        target_sim[idx] = 1.0
+        loss_l1 = F.l1_loss(src_boxes, target_boxes)
+        loss_giou = 1 - torch.diag(generalized_box_iou(src_boxes, target_boxes)).mean()
         
-        return F.binary_cross_entropy_with_logits(similarity, target_sim)
+        return {'l1': loss_l1, 'giou': loss_giou}
+    
+    def get_contrastive_loss(self, outputs, targets, indices, text_embeddings):
+        region_features = outputs['region_features']
+        
+        all_pos_regions = []
+        all_pos_texts = []
+        
+        for b in range(len(indices)):
+            pred_idx, tgt_idx = indices[b]
+            
+            if len(pred_idx) == 0:
+                continue
+                
+            matched_regions = region_features[b][pred_idx]
+            
+            if text_embeddings.dim() == 3:
+                text_emb = text_embeddings[b].mean(dim=0, keepdim=True)
+            else:
+                text_emb = text_embeddings[b:b+1]
+            
+            batch_text = text_emb.expand(len(matched_regions), -1)
+            
+            all_pos_regions.append(matched_regions)
+            all_pos_texts.append(batch_text)
+        
+        if len(all_pos_regions) == 0:
+            return torch.tensor(0.0, device=region_features.device, requires_grad=True)
+        
+        pos_regions = torch.cat(all_pos_regions, dim=0)
+        pos_texts = torch.cat(all_pos_texts, dim=0)
+        
+        all_neg_regions = []
+        for b in range(len(indices)):
+            pred_idx, _ = indices[b]
+            
+            all_queries = torch.arange(region_features.shape[1], device=region_features.device)
+            neg_mask = ~torch.isin(all_queries, pred_idx)
+            neg_regions = region_features[b][neg_mask]
+            
+            all_neg_regions.append(neg_regions)
+        
+        if len(all_neg_regions) > 0:
+            neg_regions = torch.cat(all_neg_regions, dim=0)
+            all_regions = torch.cat([pos_regions, neg_regions], dim=0)
+        else:
+            all_regions = pos_regions
+        
+        regions_norm = F.normalize(all_regions, dim=-1)
+        texts_norm = F.normalize(pos_texts, dim=-1)
+        
+        sim_matrix = torch.matmul(texts_norm, regions_norm.T) / self.temperature
+        labels = torch.arange(len(pos_texts), device=sim_matrix.device)
+        
+        return F.cross_entropy(sim_matrix, labels)
     
     def _get_src_permutation_idx(self, indices):
         batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
