@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.ops import MLP
 
 class BoxHead(nn.Module):
     def __init__(self, input_dim=768, hidden_dim=256, num_queries=100):
@@ -19,18 +20,19 @@ class BoxHead(nn.Module):
             num_layers=6
         )
         
-        self.bbox_head = nn.Sequential(
-            nn.Linear(input_dim,hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim,hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim,4)
+        # Sử dụng MLP từ torchvision.ops - tối ưu hơn
+        self.bbox_head = MLP(
+            input_dim, 
+            [hidden_dim, hidden_dim, 4], 
+            dropout=0.1,
+            activation_layer=nn.ReLU
         )
 
-        self.cls_head = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
+        self.cls_head = MLP(
+            input_dim, 
+            [hidden_dim, 1], 
+            dropout=0.1,
+            activation_layer=nn.ReLU
         )
     def forward(self, features):
         B, N, D = features.shape

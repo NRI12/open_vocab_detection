@@ -6,7 +6,27 @@ Phát hiện đối tượng trong ảnh dựa trên mô tả ngôn ngữ tự n
 
 ### 1. Cài đặt
 ```bash
+# Cài đặt PyTorch (chọn version phù hợp với CUDA)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# Cài đặt các dependencies khác
+pip install pytorch-lightning transformers timm scipy torchmetrics tensorboardX
+
+# Hoặc cài đặt từ requirements.txt
 pip install -r requirements.txt
+```
+
+**Lưu ý**: Nếu gặp lỗi cài đặt, hãy thử:
+```bash
+# Cài đặt từng package một
+pip install torch
+pip install torchvision
+pip install pytorch-lightning
+pip install transformers
+pip install timm
+pip install scipy
+pip install torchmetrics
+pip install tensorboardX
 ```
 
 ### 2. Chạy
@@ -79,3 +99,27 @@ tensorboard --logdir lightning_logs
 - **CUDA**: 11.0+ (khuyến nghị)
 - **RAM**: Tối thiểu 8GB
 - **GPU**: Tối thiểu 6GB VRAM
+
+## 📦 Dependencies
+
+### Cài đặt PyTorch (chọn version phù hợp):
+```bash
+# CPU only
+pip install torch torchvision
+
+# CUDA 11.8
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# CUDA 12.1
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+```
+
+### Cài đặt dependencies khác:
+```bash
+pip install pytorch-lightning transformers timm scipy torchmetrics tensorboardX
+```
+
+### Hoặc cài đặt tất cả:
+```bash
+pip install -r requirements.txt
+```

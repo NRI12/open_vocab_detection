@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, OneCycleLR
+from torch.cuda.amp import autocast, GradScaler
 
 from models.open_vocab import build_open_vocab_detector
 from training.losses import DetectionLoss
@@ -19,6 +20,11 @@ class OpenVocabLightningModule(pl.LightningModule):
         
         self.lr = config.get('lr', 1e-4)
         self.weight_decay = config.get('weight_decay', 1e-4)
+        self.use_amp = config.get('use_amp', True)
+        
+        # Gradient scaler cho mixed precision
+        if self.use_amp:
+            self.scaler = GradScaler()
         
     def forward(self, images, texts):
         return self.model(images, texts)
@@ -31,8 +37,14 @@ class OpenVocabLightningModule(pl.LightningModule):
             'labels': batch['labels']
         }
         
-        outputs = self(images, texts)
-        loss_dict = self.criterion(outputs, targets, texts)
+        # Sử dụng mixed precision nếu được bật
+        if self.use_amp:
+            with autocast():
+                outputs = self(images, texts)
+                loss_dict = self.criterion(outputs, targets, outputs['text_features'])
+        else:
+            outputs = self(images, texts)
+            loss_dict = self.criterion(outputs, targets, outputs['text_features'])
         
         total_loss = sum(loss_dict.values())
         
@@ -50,7 +62,7 @@ class OpenVocabLightningModule(pl.LightningModule):
         }
         
         outputs = self(images, texts)
-        loss_dict = self.criterion(outputs, targets, texts)
+        loss_dict = self.criterion(outputs, targets, outputs['text_features'])
         
         total_loss = sum(loss_dict.values())
         
@@ -64,22 +76,28 @@ class OpenVocabLightningModule(pl.LightningModule):
         return total_loss
     
     def configure_optimizers(self):
+        # Sử dụng AdamW với betas tối ưu
         optimizer = AdamW(
             self.parameters(),
             lr=self.lr,
-            weight_decay=self.weight_decay
+            weight_decay=self.weight_decay,
+            betas=(0.9, 0.999),
+            eps=1e-8
         )
         
-        scheduler = CosineAnnealingLR(
+        # Sử dụng OneCycleLR cho training nhanh hơn
+        scheduler = OneCycleLR(
             optimizer,
-            T_max=self.trainer.max_epochs,
-            eta_min=self.lr * 0.01
+            max_lr=self.lr,
+            total_steps=self.trainer.estimated_stepping_batches,
+            pct_start=0.1,
+            anneal_strategy='cos'
         )
         
         return {
             'optimizer': optimizer,
             'lr_scheduler': {
                 'scheduler': scheduler,
-                'interval': 'epoch'
+                'interval': 'step'
             }
         }

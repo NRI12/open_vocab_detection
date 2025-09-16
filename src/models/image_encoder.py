@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import timm
+from torchvision.ops import MLP
 
 class ImageEncoder(nn.Module):    
     def __init__(self, 
@@ -26,8 +27,9 @@ class ImageEncoder(nn.Module):
                 self.feature_dim = dummy_output.shape[-1]
                 self.is_conv = False
         
+        # Sử dụng MLP từ torchvision.ops - tối ưu hơn
         if self.feature_dim != out_dim:
-            self.proj = nn.Linear(self.feature_dim, out_dim)
+            self.proj = MLP(self.feature_dim, [out_dim], dropout=0.1)
         else:
             self.proj = nn.Identity()
         

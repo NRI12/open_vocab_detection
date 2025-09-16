@@ -23,7 +23,8 @@ def main():
             'fusion': {
                 'dim': 256,
                 'num_layers': 1,  # Single layer
-                'num_heads': 4    # Fewer heads
+                'num_heads': 4,   # Fewer heads
+                'text_dim': 512   # CLIP text encoder dimension
             },
             'box_head': {
                 'input_dim': 256,
@@ -38,7 +39,9 @@ def main():
             'lambda_bbox': 5.0,
             'lambda_giou': 2.0,
             'lambda_sim': 0.2,     # Much reduced similarity loss
-            'temperature': 0.1
+            'temperature': 0.1,
+            'region_dim': 256,     # Region features dimension
+            'text_dim': 512        # Text embeddings dimension
         }
     }
     

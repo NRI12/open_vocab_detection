@@ -1,17 +1,26 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.ops import generalized_box_iou
+from torchvision.ops import generalized_box_iou, box_iou
 from scipy.optimize import linear_sum_assignment
+from torchmetrics.detection import MeanAveragePrecision
+from torchmetrics.functional import pairwise_cosine_similarity
 
 
-class HungarianMatcher:
-    def __init__(self, cost_class=1, cost_bbox=5, cost_giou=2):  # Reduced class cost
+class HungarianMatcher(nn.Module):
+    def __init__(self, cost_class=1, cost_bbox=5, cost_giou=2, region_dim=256, text_dim=512):  # Reduced class cost
+        super().__init__()
         self.cost_class = cost_class
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
+        self.region_dim = region_dim
+        self.text_dim = text_dim
+        
+        # Projection layer to match dimensions
+        self.region_proj = nn.Linear(region_dim, 256) if region_dim != 256 else nn.Identity()
+        self.text_proj = nn.Linear(text_dim, 256) if text_dim != 256 else nn.Identity()
     
-    def __call__(self, outputs, targets, text_embeddings):
+    def forward(self, outputs, targets, text_embeddings):
         B, num_queries = outputs['bbox_pred'].shape[:2]
         
         region_embeddings = outputs['region_features'].flatten(0, 1)
@@ -36,10 +45,20 @@ class HungarianMatcher:
         tgt_bbox = torch.cat(all_tgt_boxes)
         tgt_text_emb = torch.cat(all_tgt_labels)
         
-        region_emb_norm = F.normalize(region_embeddings, dim=-1)
-        tgt_text_norm = F.normalize(tgt_text_emb, dim=-1)
+        # Ensure tensors are on the same device as the model
+        device = next(self.parameters()).device
+        tgt_text_emb = tgt_text_emb.to(device)
         
-        cost_class = -torch.matmul(region_emb_norm, tgt_text_norm.T)
+        # Project to same dimension
+        region_emb_proj = self.region_proj(region_embeddings)
+        tgt_text_proj = self.text_proj(tgt_text_emb)
+        
+        region_emb_norm = F.normalize(region_emb_proj, dim=-1)
+        tgt_text_norm = F.normalize(tgt_text_proj, dim=-1)
+        
+        # Sử dụng torchmetrics cho cosine similarity - tối ưu hơn
+        # pairwise_cosine_similarity expects (N, D) and (M, D) -> (N, M)
+        cost_class = -pairwise_cosine_similarity(region_emb_norm, tgt_text_norm)
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
         cost_giou = -generalized_box_iou(out_bbox, tgt_bbox)
         
@@ -58,16 +77,26 @@ class HungarianMatcher:
 class DetectionLoss(nn.Module):
     def __init__(self, config=None):
         super().__init__()
-        self.matcher = HungarianMatcher()
         
-        self.lambda_cls = config.get('lambda_cls', 2.0)
-        self.lambda_bbox = config.get('lambda_bbox', 5.0) 
-        self.lambda_giou = config.get('lambda_giou', 2.0)
-        self.lambda_sim = config.get('lambda_sim', 1.0)
-        self.temperature = config.get('temperature', 0.07)
+        region_dim = config.get('region_dim', 256) if config else 256
+        text_dim = config.get('text_dim', 512) if config else 512
         
-    def forward(self, outputs, targets, text_embeddings, texts):
-        indices = self.matcher(outputs, targets, text_embeddings)
+        self.matcher = HungarianMatcher(
+            cost_class=config.get('cost_class', 1) if config else 1,
+            cost_bbox=config.get('cost_bbox', 5) if config else 5,
+            cost_giou=config.get('cost_giou', 2) if config else 2,
+            region_dim=region_dim,
+            text_dim=text_dim
+        )
+        
+        self.lambda_cls = config.get('lambda_cls', 2.0) if config else 2.0
+        self.lambda_bbox = config.get('lambda_bbox', 5.0) if config else 5.0
+        self.lambda_giou = config.get('lambda_giou', 2.0) if config else 2.0
+        self.lambda_sim = config.get('lambda_sim', 1.0) if config else 1.0
+        self.temperature = config.get('temperature', 0.07) if config else 0.07
+        
+    def forward(self, outputs, targets, text_embeddings):
+        indices = self.matcher.forward(outputs, targets, text_embeddings)
         
         losses = {}
         
@@ -146,6 +175,7 @@ class DetectionLoss(nn.Module):
             pred_idx, _ = indices[b]
             
             all_queries = torch.arange(region_features.shape[1], device=region_features.device)
+            pred_idx = pred_idx.to(region_features.device)
             neg_mask = ~torch.isin(all_queries, pred_idx)
             neg_regions = region_features[b][neg_mask]
             
@@ -162,10 +192,21 @@ class DetectionLoss(nn.Module):
         else:
             all_regions = pos_regions
         
-        regions_norm = F.normalize(all_regions, dim=-1)
-        texts_norm = F.normalize(pos_texts, dim=-1)
+        # Ensure tensors are on the same device as the model
+        device = next(self.matcher.parameters()).device
+        all_regions = all_regions.to(device)
+        pos_texts = pos_texts.to(device)
         
-        sim_matrix = torch.matmul(texts_norm, regions_norm.T) / self.temperature
+        # Project to same dimension
+        regions_proj = self.matcher.region_proj(all_regions)
+        texts_proj = self.matcher.text_proj(pos_texts)
+        
+        regions_norm = F.normalize(regions_proj, dim=-1)
+        texts_norm = F.normalize(texts_proj, dim=-1)
+        
+        # Sử dụng torchmetrics cho cosine similarity - tối ưu hơn
+        # pairwise_cosine_similarity expects (N, D) and (M, D) -> (N, M)
+        sim_matrix = pairwise_cosine_similarity(texts_norm, regions_norm) / self.temperature
         labels = torch.arange(len(pos_texts), device=sim_matrix.device)
         
         return F.cross_entropy(sim_matrix, labels)

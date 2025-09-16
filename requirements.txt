@@ -1,7 +1,27 @@
-pytorch_lightning
-matplotlib
-torchvision
-transformers
-scipy
-torchmetrics[detection]
-tensorboardX
+# Core PyTorch
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Lightning và training
+pytorch_lightning>=2.0.0
+torchmetrics[detection]>=0.11.0
+
+# Vision models
+timm>=0.9.0
+transformers>=4.30.0
+
+# Utilities
+scipy>=1.10.0
+matplotlib>=3.7.0
+tensorboardX>=2.6.0
+pillow>=9.5.0
+opencv-python>=4.8.0
+
+# Optimization
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Development
+tqdm>=4.65.0
+wandb>=0.15.0
