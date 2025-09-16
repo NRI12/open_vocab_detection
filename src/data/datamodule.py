@@ -22,17 +22,19 @@ def collate_fn(batch):
         'img_ids': img_ids,
         'orig_sizes': orig_sizes
     }
+
 class Flickr30kDataModule(pl.LightningDataModule):
     def __init__(self, 
                  data_dir='./data',
                  batch_size=16,
                  num_workers=4,
-                 img_size=(800, 800)):
+                 img_size=(384, 384)):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size
-        self.num_workers = num_workers
+        self.num_workers = min(num_workers, 8)  # Cap workers
         self.img_size = img_size
+        self.persistent_workers = True  # Keep workers alive
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
             self.train_dataset = Flickr30kDataset(
@@ -56,7 +58,9 @@ class Flickr30kDataModule(pl.LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             collate_fn=collate_fn,
-            drop_last=True
+            drop_last=True,
+            persistent_workers=self.persistent_workers,
+            pin_memory=True  # Faster GPU transfer
         )
     
     def val_dataloader(self):
@@ -65,7 +69,9 @@ class Flickr30kDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=collate_fn
+            collate_fn=collate_fn,
+            persistent_workers=self.persistent_workers,
+            pin_memory=True
         )
     
     def test_dataloader(self):
@@ -74,7 +80,7 @@ class Flickr30kDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=collate_fn
+            collate_fn=collate_fn,
+            persistent_workers=self.persistent_workers,
+            pin_memory=True
         )
-
-    

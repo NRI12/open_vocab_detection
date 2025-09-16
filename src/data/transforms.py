@@ -79,12 +79,12 @@ class Normalize:
         image = F.normalize(image, self.mean, self.std)
         return image, boxes
 
-def get_transforms(split='train', img_size=(800, 800)):
+def get_transforms(split='train', img_size=(384, 384)):
     if split == 'train':
         return Compose([
             Resize(img_size),
             RandomHorizontalFlip(0.5),
-            ColorJitter(0.2, 0.2, 0.2, 0.1),
+            ColorJitter(0.1, 0.1, 0.1, 0.05),  # Reduced augmentation
             ToTensor(),
             Normalize()
         ])

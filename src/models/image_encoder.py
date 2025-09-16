@@ -61,8 +61,3 @@ def build_image_encoder(config):
     out_dim = config.get('out_dim', 768)
     
     return ImageEncoder(model_name, pretrained, out_dim)
-# ### USAGE:
-# encoder = build_image_encoder({
-#     'model_name': 'swin_base_patch4_window7_224',
-#     'out_dim': 768
-# })

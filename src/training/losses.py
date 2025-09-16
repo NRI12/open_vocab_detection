@@ -6,7 +6,7 @@ from scipy.optimize import linear_sum_assignment
 
 
 class HungarianMatcher:
-    def __init__(self, cost_class=2, cost_bbox=5, cost_giou=2):
+    def __init__(self, cost_class=1, cost_bbox=5, cost_giou=2):  # Reduced class cost
         self.cost_class = cost_class
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
@@ -140,6 +140,7 @@ class DetectionLoss(nn.Module):
         pos_regions = torch.cat(all_pos_regions, dim=0)
         pos_texts = torch.cat(all_pos_texts, dim=0)
         
+        # Simplified negative sampling - only use a subset
         all_neg_regions = []
         for b in range(len(indices)):
             pred_idx, _ = indices[b]
@@ -147,6 +148,11 @@ class DetectionLoss(nn.Module):
             all_queries = torch.arange(region_features.shape[1], device=region_features.device)
             neg_mask = ~torch.isin(all_queries, pred_idx)
             neg_regions = region_features[b][neg_mask]
+            
+            # Sample only a subset of negatives to reduce computation
+            if len(neg_regions) > 10:
+                neg_indices = torch.randperm(len(neg_regions), device=neg_regions.device)[:10]
+                neg_regions = neg_regions[neg_indices]
             
             all_neg_regions.append(neg_regions)
         

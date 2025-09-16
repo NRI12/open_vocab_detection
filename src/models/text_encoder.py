@@ -37,9 +37,6 @@ class TextEncoder(nn.Module):
 
 
 def build_text_encoder(config=None):
-    return TextEncoder('openai/clip-vit-base-patch32')
+    model_name = config.get('model_name', 'openai/clip-vit-base-patch32') if config else 'openai/clip-vit-base-patch32'
+    return TextEncoder(model_name)
 
-# (3,512) # shape
-# encoder = TextEncoder()
-# features = encoder(["A woman", "pink dress", "dog running"])
-# print(features.shape)
