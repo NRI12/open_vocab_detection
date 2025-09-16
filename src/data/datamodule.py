@@ -28,7 +28,7 @@ class Flickr30kDataModule(pl.LightningDataModule):
                  data_dir='./data',
                  batch_size=16,
                  num_workers=4,
-                 img_size=(384, 384)):
+                 img_size=(224, 224)):
         super().__init__()
         self.data_dir = data_dir
         self.batch_size = batch_size

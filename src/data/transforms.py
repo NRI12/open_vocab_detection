@@ -79,7 +79,7 @@ class Normalize:
         image = F.normalize(image, self.mean, self.std)
         return image, boxes
 
-def get_transforms(split='train', img_size=(384, 384)):
+def get_transforms(split='train', img_size=(224, 224)):
     if split == 'train':
         return Compose([
             Resize(img_size),

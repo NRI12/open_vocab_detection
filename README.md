@@ -9,29 +9,24 @@ Phát hiện đối tượng trong ảnh dựa trên mô tả ngôn ngữ tự n
 pip install -r requirements.txt
 ```
 
-### 2. Test nhanh
+### 2. Chạy
 ```bash
-python scripts/quick_test.py
+python run.py train    # Training
+python run.py test     # Test model
+python run.py eval     # Đánh giá
 ```
 
-### 3. Training (Khuyến nghị)
-```bash
-python scripts/train_optimized.py
-```
+## 🚀 Scripts
 
-## 🚀 Các script chính
-
-| Script | Mô tả | Thời gian |
-|--------|-------|-----------|
-| `quick_test.py` | Test model và memory | ~2 phút |
-| `train_optimized.py` | Training tối ưu (khuyến nghị) | ~2-3 giờ |
-| `train.py` | Training gốc | ~6-8 giờ |
-| `compare_models.py` | So sánh hiệu suất | ~5 phút |
-| `evaluate.py` | Đánh giá model | ~30 phút |
+| Lệnh | Mô tả | Thời gian |
+|------|-------|-----------|
+| `python run.py test` | Test model | ~1 phút |
+| `python run.py train` | Training | ~2-3 giờ |
+| `python run.py eval` | Đánh giá | ~30 phút |
 
 ## 📊 Kiến trúc tối ưu
 
-**Input**: Ảnh (256x256) + Text prompt
+**Input**: Ảnh (224x224) + Text prompt
 
 **Pipeline**:
 1. **Image Encoder**: Swin-Tiny (28M params)
@@ -42,22 +37,19 @@ python scripts/train_optimized.py
 
 ## 🎯 Hiệu suất
 
-| Metric | Model gốc | Model tối ưu | Cải thiện |
-|--------|-----------|--------------|-----------|
-| Parameters | 88M | 28M | -68% |
-| Memory | ~6GB | ~3GB | -50% |
-| Speed | 30 samples/s | 100 samples/s | +233% |
-| Training time | 50 epochs | 20 epochs | -60% |
+| Metric | Model tối ưu |
+|--------|--------------|
+| Parameters | 28M |
+| Memory | ~3GB VRAM |
+| Speed | 100 samples/s |
+| Training time | 20 epochs |
 
 ## 📁 Cấu trúc dự án
 
 ```
 ├── scripts/              # Scripts chính
-│   ├── quick_test.py     # Test nhanh
-│   ├── train_optimized.py # Training tối ưu (khuyến nghị)
-│   ├── train.py          # Training gốc
-│   ├── compare_models.py # So sánh hiệu suất
-│   └── evaluate.py       # Đánh giá model
+│   ├── train.py          # Training
+│   └── evaluate.py       # Đánh giá
 ├── src/
 │   ├── data/             # Dataloader và transforms
 │   ├── models/           # Định nghĩa model
@@ -68,15 +60,22 @@ python scripts/train_optimized.py
 └── lightning_logs/       # Logs và checkpoints
 ```
 
-## 📚 Tài liệu
-
-- **[HOW_TO_RUN.md](HOW_TO_RUN.md)**: Hướng dẫn chi tiết cách chạy
-- **[OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md)**: Giải thích các tối ưu hóa
-- **TensorBoard**: `tensorboard --logdir lightning_logs`
-
 ## 🎯 Ưu điểm
 
 - ✅ **Nhanh**: Training 3-4x nhanh hơn
-- ✅ **Nhẹ**: Giảm 68% parameters, 50% memory
+- ✅ **Nhẹ**: 28M parameters, 3GB VRAM
 - ✅ **Linh hoạt**: Phát hiện đối tượng mới không cần training
-- ✅ **Dễ sử dụng**: Scripts đơn giản, hướng dẫn rõ ràng
+- ✅ **Dễ sử dụng**: Chỉ cần `python run.py train`
+
+## 📊 Monitoring
+
+```bash
+tensorboard --logdir lightning_logs
+```
+
+## 🔧 Yêu cầu hệ thống
+
+- **Python**: 3.8+
+- **CUDA**: 11.0+ (khuyến nghị)
+- **RAM**: Tối thiểu 8GB
+- **GPU**: Tối thiểu 6GB VRAM

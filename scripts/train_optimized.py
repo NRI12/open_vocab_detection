@@ -47,7 +47,7 @@ def main():
         data_dir='./data',
         batch_size=24,  # Larger batch size for better GPU utilization
         num_workers=8,  # More workers
-        img_size=(256, 256)  # Smaller images for faster training
+        img_size=(224, 224)  # Match Swin-Tiny input size
     )
     
     # Model

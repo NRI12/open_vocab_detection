@@ -31,7 +31,7 @@ def run_command(cmd, description):
 def main():
     parser = argparse.ArgumentParser(description='Open Vocabulary Detection Runner')
     parser.add_argument('command', choices=[
-        'test', 'train', 'train-opt', 'compare', 'eval', 'all'
+        'test', 'train', 'eval', 'all'
     ], help='Command to run')
     
     args = parser.parse_args()
@@ -41,26 +41,14 @@ def main():
     
     if args.command == 'test':
         success = run_command(
-            "python scripts/quick_test.py",
-            "Test nhanh model và memory"
+            "python -c \"import torch; from src.models.open_vocab import build_open_vocab_detector; print('✅ Model import OK')\"",
+            "Test nhanh model import"
         )
         
     elif args.command == 'train':
         success = run_command(
             "python scripts/train.py",
-            "Training với model gốc"
-        )
-        
-    elif args.command == 'train-opt':
-        success = run_command(
-            "python scripts/train_optimized.py", 
-            "Training với model tối ưu (khuyến nghị)"
-        )
-        
-    elif args.command == 'compare':
-        success = run_command(
-            "python scripts/compare_models.py",
-            "So sánh hiệu suất model cũ vs mới"
+            "Training model tối ưu"
         )
         
     elif args.command == 'eval':
@@ -73,9 +61,8 @@ def main():
         print("🚀 Chạy tất cả các bước...")
         
         steps = [
-            ("python scripts/quick_test.py", "1. Test nhanh"),
-            ("python scripts/compare_models.py", "2. So sánh hiệu suất"),
-            ("python scripts/train_optimized.py", "3. Training tối ưu")
+            ("python -c \"import torch; from src.models.open_vocab import build_open_vocab_detector; print('✅ Model OK')\"", "1. Test model"),
+            ("python scripts/train.py", "2. Training")
         ]
         
         for cmd, desc in steps:
@@ -97,12 +84,10 @@ if __name__ == '__main__':
         print("🎯 Open Vocabulary Detection - Main Runner")
         print("=" * 50)
         print("Sử dụng:")
-        print("  python run.py test        # Test nhanh")
-        print("  python run.py train-opt   # Training tối ưu (khuyến nghị)")
-        print("  python run.py train       # Training gốc")
-        print("  python run.py compare     # So sánh hiệu suất")
-        print("  python run.py eval        # Đánh giá model")
+        print("  python run.py test        # Test model")
+        print("  python run.py train       # Training")
+        print("  python run.py eval        # Đánh giá")
         print("  python run.py all         # Chạy tất cả")
-        print("\n📚 Xem thêm: HOW_TO_RUN.md")
+        print("\n📚 Xem thêm: README.md")
     else:
         main()

@@ -9,45 +9,45 @@ from data.datamodule import Flickr30kDataModule
 from training.lightning_module import OpenVocabLightningModule
 
 def main():
-    # Config - Optimized for better performance
+    # Optimized config for better performance and faster training
     config = {
         'model': {
             'image_encoder': {
-                'model_name': 'swin_tiny_patch4_window7_224',  # Lighter model
+                'model_name': 'swin_tiny_patch4_window7_224',  # Much lighter model
                 'pretrained': True,
-                'out_dim': 384  # Reduced dimension
+                'out_dim': 256  # Further reduced dimension
             },
             'text_encoder': {
-                'model_name': 'openai/clip-vit-base-patch32'  # Smaller CLIP
+                'model_name': 'openai/clip-vit-base-patch32'
             },
             'fusion': {
-                'dim': 384,
-                'num_layers': 1,  # Reduced layers
-                'num_heads': 6
+                'dim': 256,
+                'num_layers': 1,  # Single layer
+                'num_heads': 4    # Fewer heads
             },
             'box_head': {
-                'input_dim': 384,
-                'hidden_dim': 192,
-                'num_queries': 50  # Reduced queries
+                'input_dim': 256,
+                'hidden_dim': 128,
+                'num_queries': 25  # Much fewer queries
             }
         },
-        'lr': 2e-4,  # Higher learning rate
+        'lr': 3e-4,  # Higher learning rate for faster convergence
         'weight_decay': 1e-4,
         'loss': {
-            'lambda_cls': 1.0,
+            'lambda_cls': 0.5,     # Reduced classification loss
             'lambda_bbox': 5.0,
             'lambda_giou': 2.0,
-            'lambda_sim': 0.5,  # Reduced similarity loss weight
+            'lambda_sim': 0.2,     # Much reduced similarity loss
             'temperature': 0.1
         }
     }
     
-    # Data - Optimized settings
+    # Data with optimized settings
     dm = Flickr30kDataModule(
         data_dir='./data',
-        batch_size=16,  # Increased batch size
-        num_workers=6,  # More workers
-        img_size=(384, 384)  # Smaller image size for faster training
+        batch_size=24,  # Larger batch size for better GPU utilization
+        num_workers=8,  # More workers
+        img_size=(224, 224)  # Match Swin-Tiny input size
     )
     
     # Model
@@ -57,37 +57,50 @@ def main():
     checkpoint_callback = ModelCheckpoint(
         monitor='val/mAP',
         mode='max',
-        save_top_k=3,
-        filename='epoch{epoch:02d}-map{val/mAP:.3f}'
+        save_top_k=2,  # Save fewer checkpoints
+        filename='epoch{epoch:02d}-map{val/mAP:.3f}',
+        save_last=True
     )
     
     early_stopping = EarlyStopping(
         monitor='val/total_loss',
-        patience=10,
-        mode='min'
+        patience=8,  # Reduced patience
+        mode='min',
+        min_delta=0.001
     )
     
-    lr_monitor = LearningRateMonitor(logging_interval='epoch')
+    lr_monitor = LearningRateMonitor(logging_interval='step')
     
     # Logger
-    logger = TensorBoardLogger('lightning_logs', name='open_vocab_detection')
+    logger = TensorBoardLogger('lightning_logs', name='open_vocab_optimized')
     
-    # Trainer - Optimized for performance
+    # Trainer with memory optimizations
     trainer = pl.Trainer(
-        max_epochs=30,  # Reduced epochs
+        max_epochs=20,  # Fewer epochs
         accelerator='gpu',
         devices=1,
         callbacks=[checkpoint_callback, early_stopping, lr_monitor],
         logger=logger,
         val_check_interval=0.5,
-        log_every_n_steps=25,  # More frequent logging
-        precision=16,  # Mixed precision for memory efficiency
-        gradient_clip_val=1.0,  # Gradient clipping
-        accumulate_grad_batches=2,  # Gradient accumulation
-        deterministic=False  # Allow non-deterministic for speed
+        log_every_n_steps=10,  # More frequent logging
+        precision=16,  # Mixed precision
+        gradient_clip_val=0.5,  # Gradient clipping
+        accumulate_grad_batches=1,  # No accumulation needed with larger batch
+        deterministic=False,  # Allow non-deterministic for speed
+        enable_progress_bar=True,
+        enable_model_summary=True,
+        fast_dev_run=False,  # Set to True for quick testing
+        limit_train_batches=1.0,  # Use full dataset
+        limit_val_batches=0.5,  # Use half of validation for speed
     )
     
     # Train
+    print("Starting optimized training...")
+    print(f"Model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
+    print(f"Batch size: {dm.batch_size}")
+    print(f"Image size: {dm.img_size}")
+    print(f"Max epochs: {trainer.max_epochs}")
+    
     trainer.fit(model, dm)
 
 if __name__ == '__main__':
