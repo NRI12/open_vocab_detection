@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.nn.attention import SDPA
 
 class FusionModule(nn.Module):
     def __init__(self, dim=768, num_layers=2, num_heads=8, dropout=0.1, text_dim=512):
@@ -10,17 +9,11 @@ class FusionModule(nn.Module):
         self.img_proj = nn.Identity()  # Image features already have correct dim
         self.text_proj = nn.Linear(text_dim, dim) if text_dim != dim else nn.Identity()
         
-        # Sử dụng SDPA (Scaled Dot-Product Attention) - tối ưu hơn
+        # Sử dụng MultiheadAttention - tương thích với mọi phiên bản PyTorch
         self.cross_attn_layers = nn.ModuleList([
-            SDPA(attn_mask=None, is_causal=False, scale=None, dropout_p=dropout)
+            nn.MultiheadAttention(dim, num_heads, dropout=dropout, batch_first=True)
             for _ in range(num_layers)
         ])
-        
-        # Thêm projection layers cho query, key, value
-        self.q_proj = nn.Linear(dim, dim)
-        self.k_proj = nn.Linear(dim, dim) 
-        self.v_proj = nn.Linear(dim, dim)
-        self.out_proj = nn.Linear(dim, dim)
         
         self.norms = nn.ModuleList([nn.LayerNorm(dim) for _ in range(num_layers)])
         
@@ -44,13 +37,8 @@ class FusionModule(nn.Module):
         for cross_attn, norm, ffn, ffn_norm in zip(
             self.cross_attn_layers, self.norms, self.ffns, self.ffn_norms
         ):
-            # Sử dụng SDPA với projection layers
-            q = self.q_proj(x)
-            k = self.k_proj(text_seq)
-            v = self.v_proj(text_seq)
-            
-            attn_out = cross_attn(q, k, v)
-            attn_out = self.out_proj(attn_out)
+            # Sử dụng MultiheadAttention trực tiếp
+            attn_out, _ = cross_attn(query=x, key=text_seq, value=text_seq)
             x = norm(x + attn_out)
             x = ffn_norm(x + ffn(x))
         

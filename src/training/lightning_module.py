@@ -24,7 +24,7 @@ class OpenVocabLightningModule(pl.LightningModule):
         
         # Gradient scaler cho mixed precision
         if self.use_amp:
-            self.scaler = GradScaler()
+            self.scaler = GradScaler('cuda')
         
     def forward(self, images, texts):
         return self.model(images, texts)

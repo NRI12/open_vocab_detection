@@ -1,6 +1,27 @@
 import torch
 import torch.nn as nn
-from torchvision.ops import MLP
+
+# Fallback cho MLP nếu torchvision.ops.MLP không có sẵn
+try:
+    from torchvision.ops import MLP
+except ImportError:
+    # Fallback implementation
+    class MLP(nn.Module):
+        def __init__(self, in_channels, hidden_channels, dropout=0.0, activation_layer=nn.ReLU):
+            super().__init__()
+            layers = []
+            prev_channels = in_channels
+            for hidden_channels in hidden_channels:
+                layers.extend([
+                    nn.Linear(prev_channels, hidden_channels),
+                    activation_layer(),
+                    nn.Dropout(dropout)
+                ])
+                prev_channels = hidden_channels
+            self.layers = nn.Sequential(*layers[:-1])  # Remove last dropout
+        
+        def forward(self, x):
+            return self.layers(x)
 
 class BoxHead(nn.Module):
     def __init__(self, input_dim=768, hidden_dim=256, num_queries=100):

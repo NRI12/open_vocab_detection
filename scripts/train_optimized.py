@@ -52,9 +52,7 @@ def main():
         data_dir='./data',
         batch_size=32,  # Batch size lớn hơn
         num_workers=8,  # Nhiều workers
-        img_size=(224, 224),
-        pin_memory=True,  # Pin memory cho GPU
-        persistent_workers=True  # Giữ workers
+        img_size=(224, 224)
     )
     
     # Model
@@ -103,7 +101,6 @@ def main():
         limit_train_batches=1.0,
         limit_val_batches=0.3,  # Chỉ dùng 30% validation
         sync_batchnorm=True,  # Sync batch norm
-        replace_sampler_ddp=False,  # Tối ưu DDP
         detect_anomaly=False,  # Tắt anomaly detection để tăng tốc
     )
     
